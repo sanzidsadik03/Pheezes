@@ -30,6 +30,8 @@ export default async function OrdersPage() {
                             <TableHead>Customer</TableHead>
                             <TableHead>Items</TableHead>
                             <TableHead>Total</TableHead>
+                            <TableHead>Advance</TableHead>
+                            <TableHead>Due (COD)</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -50,6 +52,8 @@ export default async function OrdersPage() {
                                     ))}
                                 </TableCell>
                                 <TableCell>Tk {order.totalAmount}</TableCell>
+                                <TableCell className="text-green-500">Tk {order.advance}</TableCell>
+                                <TableCell className="font-bold">Tk {order.totalAmount - order.advance}</TableCell>
                                 <TableCell>
                                     <Badge variant={
                                         order.status === "PENDING" ? "secondary" :

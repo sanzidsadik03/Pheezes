@@ -13,6 +13,7 @@ export type OrderInput = {
     customerName: string
     customerContact?: string
     customerAddress?: string
+    advance?: number
     items: OrderItemInput[]
 }
 
@@ -27,6 +28,7 @@ export async function createOrder(data: OrderInput) {
                 customerAddress: data.customerAddress,
                 status: "PENDING",
                 totalAmount,
+                advance: data.advance || 0,
                 items: {
                     create: data.items.map(item => ({
                         productVariationId: item.productVariationId,

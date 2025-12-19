@@ -31,8 +31,9 @@ model Order {
   customerName    String
   customerContact String?
   customerAddress String?
-  status          String      // PENDING, PROCESSING, DISPATCHED
+  status          String      // PENDING, PROCESSING, DISPATCHED, RETURNED
   totalAmount     Float
+  advance         Float       @default(0)
   items           OrderItem[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
