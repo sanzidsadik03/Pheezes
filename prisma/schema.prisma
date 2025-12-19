@@ -50,8 +50,9 @@ model OrderItem {
 
 model Transaction {
   id          Int      @id @default(autoincrement())
-  type        String   // INCOME, EXPENSE, INVESTMENT
+  type        String   // INCOME, EXPENSE
   amount      Float
   description String?
+  account     String   @default("MISC") // BKASH, MISC
   date        DateTime @default(now())
 }

@@ -74,25 +74,8 @@ export async function processOrder(orderId: number) {
                 data: { status: "PROCESSING" }
             })
 
-            // Add to Cash Transaction (Income)
-            // "When I get the money or payment we just update our total cash"
-            // Assuming payment is confirmed upon processing or dispatch?
-            // User said: "When I put something into the processing... qty updated... Also needed a cash management system... When I get the money... we just update out total cash"
-            // I'll add the transaction now assuming payment is received, or maybe a separate "Mark Paid" button?
-            // Let's assume processing implies commitment/payment for now or we create a separate "Complete/Pay" step.
-            // Requirements: "when I get the money or payement we just update out total cash"
-            // I'll add a separate step for "Mark Paid" or just do it on Dispatch/Process. 
-            // Let's add it on "Process" for simplicity, or maybe "Dispatch". 
-            // Let's add an explicit Transaction entry when processing?
-            // Actually, I'll add the transaction here.
-
-            await tx.transaction.create({
-                data: {
-                    type: "INCOME",
-                    amount: order.totalAmount,
-                    description: `Order #${order.id} - ${order.customerName}`
-                }
-            })
+            // Transaction is now handled manually manually by the user
+            // via the Cash Management page.
         })
 
         revalidatePath("/orders")
@@ -115,6 +98,35 @@ export async function dispatchOrder(orderId: number) {
         return { success: true }
     } catch (error) {
         console.error("Failed to dispatch order:", error)
+        return { success: false, error }
+    }
+}
+
+export async function returnOrder(orderId: number) {
+    try {
+        // We only mark status as RETURNED. Stock is NOT automatically restored.
+        // User must manually restock if the item is salvageable.
+        await prisma.order.update({
+            where: { id: orderId },
+            data: { status: "RETURNED" }
+        })
+        revalidatePath("/orders")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to return order:", error)
+        return { success: false, error }
+    }
+}
+
+export async function deleteOrder(orderId: number) {
+    try {
+        await prisma.order.delete({
+            where: { id: orderId }
+        })
+        revalidatePath("/orders")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to delete order:", error)
         return { success: false, error }
     }
 }

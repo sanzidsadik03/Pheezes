@@ -22,16 +22,12 @@ export async function createProduct(data: ProductInput) {
                 name: data.name,
                 description: data.description,
                 variations: {
-                    create: data.variations.map((v) => ({
-                        name: v.name,
-                        quantity: v.quantity,
-                        price: v.price,
-                    })),
-                },
+                    create: data.variations
+                }
             },
             include: {
-                variations: true,
-            },
+                variations: true
+            }
         })
         revalidatePath("/products")
         return { success: true, product }
@@ -42,18 +38,39 @@ export async function createProduct(data: ProductInput) {
 }
 
 export async function getProducts() {
+    return await prisma.product.findMany({
+        include: {
+            variations: true
+        },
+        orderBy: {
+            createdAt: "desc"
+        }
+    })
+}
+
+export async function deleteProduct(id: number) {
     try {
-        const products = await prisma.product.findMany({
-            include: {
-                variations: true,
-            },
-            orderBy: {
-                createdAt: "desc",
-            },
+        await prisma.product.delete({
+            where: { id }
         })
-        return products
+        revalidatePath("/products")
+        return { success: true }
     } catch (error) {
-        console.error("Failed to fetch products:", error)
-        return []
+        console.error("Failed to delete product:", error)
+        return { success: false, error: "Failed to delete product" }
+    }
+}
+
+export async function updateVariationStock(id: number, quantity: number) {
+    try {
+        await prisma.productVariation.update({
+            where: { id },
+            data: { quantity }
+        })
+        revalidatePath("/products")
+        return { success: true }
+    } catch (error) {
+        console.error("Failed to update stock:", error)
+        return { success: false, error: "Failed to update stock" }
     }
 }

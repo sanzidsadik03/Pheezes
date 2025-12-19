@@ -1,55 +1,80 @@
-import { prisma } from "@/lib/prisma"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getTransactions, deleteTransaction } from "@/app/actions/cash"
+import { TransactionDialog } from "@/components/cash/transaction-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { TransactionList } from "@/components/cash/transaction-list"
 
 export const dynamic = "force-dynamic"
-
-async function getTransactions() {
-    return await prisma.transaction.findMany({ orderBy: { date: "desc" } })
-}
 
 export default async function CashPage() {
     const transactions = await getTransactions()
 
-    // Starting cash: 8000tk (2000 * 4)
-    // Assuming transactions are delta.
-    // Total = 8000 + sum(transactions using signed amount if needed, but schema has type)
-    // Type INCOME (+), EXPENSE (-), INVESTMENT (+)
+    // Initial Investment: 8000tk (2000 * 4) as starting point or base?
+    // User said: "Each gave 2000tk in the starting... we just update out total cash and from there how much we each have"
+    // So 8000 is the "Capital".
+    // Does Capital exist in Bkash or Misc? Usually Misc/Hand.
+    // Let's assume Capital is essentially part of the "Total Cash". 
+    // We can just add a base amount or assume it's already "in hand".
+    // I'll calculate total based on transactions + 8000 base capital.
+    // Or better, should the user ADD the capital as a transaction? 
+    // "We are 4 share holder... Each gave 2000tk... For example if we have 10000 cash... each person will have 2500"
+    // This implies Total Cash is all that matters for the split.
+    // I'll keep the 8000 base for now so they don't see 0 initially.
 
-    const initialCash = 8000
+    const initialCapital = 8000
 
-    const runningTotal = transactions.reduce((acc, t) => {
-        if (t.type === "INCOME" || t.type === "INVESTMENT") return acc + t.amount
-        if (t.type === "EXPENSE") return acc - t.amount
-        return acc
-    }, 0)
+    const bkashTotal = transactions
+        .filter(t => t.account === "BKASH")
+        .reduce((acc, t) => t.type === "INCOME" ? acc + t.amount : acc - t.amount, 0)
 
-    const totalCash = initialCash + runningTotal
-    const sharePerPerson = totalCash / 4
+    const miscTotal = transactions
+        .filter(t => t.account === "MISC") // Default account
+        .reduce((acc, t) => t.type === "INCOME" ? acc + t.amount : acc - t.amount, 0)
+
+    // If no transactions have account (old data), treat as MISC? 
+    // Logic: type INCOME adds, expense subtracts.
+    // If initialCapital is "Cash in Hand", maybe it belongs to MISC implicitly?
+    // Let's just show the calculated totals + 8000 added to the Grand Total for Shareholder Calc.
+
+    const grandTotal = initialCapital + bkashTotal + miscTotal
+    const sharePerPerson = grandTotal / 4
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight gradient-text">Cash Management</h1>
-                <p className="text-muted-foreground">Track cash flow and shareholder equity.</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight gradient-text">Cash Management</h1>
+                    <p className="text-muted-foreground">Track manual deposits, expenses, and equity.</p>
+                </div>
+                <TransactionDialog />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
-                <Card className="glass border-primary/20">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Cash in Hand</CardTitle>
+            <div className="grid gap-4 md:grid-cols-3">
+                <Card className="glass border-pink-500/20">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Bkash Balance</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-4xl font-bold text-primary">Tk {totalCash.toLocaleString()}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Starting Balance: Tk {initialCash}</p>
+                        <div className="text-3xl font-bold text-pink-500">Tk {bkashTotal.toLocaleString()}</div>
+                    </CardContent>
+                </Card>
+                <Card className="glass border-amber-500/20">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Miscellaneous / Cash</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-bold text-amber-500">
+                            Tk {(miscTotal + initialCapital).toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Includes 8000k Initial Capital</p>
                     </CardContent>
                 </Card>
                 <Card className="glass border-indigo-500/20">
-                    <CardHeader>
+                    <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Shareholder Equity (25%)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-4xl font-bold text-white">Tk {sharePerPerson.toLocaleString()}</div>
+                        <div className="text-3xl font-bold text-white">Tk {sharePerPerson.toLocaleString()}</div>
                         <p className="text-xs text-muted-foreground mt-1">Per person share</p>
                     </CardContent>
                 </Card>
@@ -57,30 +82,10 @@ export default async function CashPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Recent Transactions</CardTitle>
+                    <CardTitle>Transaction History</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        {transactions.map((t) => (
-                            <div key={t.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                                <div>
-                                    <p className="font-medium">{t.description || "Transaction"}</p>
-                                    <p className="text-sm text-muted-foreground">{new Date(t.date).toLocaleDateString()}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge variant={t.type === "INCOME" ? "default" : t.type === "EXPENSE" ? "destructive" : "secondary"}>
-                                        {t.type}
-                                    </Badge>
-                                    <span className={t.type === "EXPENSE" ? "text-red-400 font-bold" : "text-green-400 font-bold"}>
-                                        {t.type === "EXPENSE" ? "-" : "+"} Tk {t.amount}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                        {transactions.length === 0 && (
-                            <div className="text-center text-muted-foreground">No transactions yet.</div>
-                        )}
-                    </div>
+                    <TransactionList transactions={transactions} />
                 </CardContent>
             </Card>
         </div>
