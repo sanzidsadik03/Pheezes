@@ -2,6 +2,7 @@ import { getOrders, processOrder, dispatchOrder } from "@/app/actions/order"
 import { getProducts } from "@/app/actions/product"
 import { CreateOrderDialog } from "@/components/orders/create-order-dialog"
 import { OrderActions } from "@/components/orders/order-actions"
+import { ViewOrderDetails } from "@/components/orders/view-order-details"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -22,8 +23,8 @@ export default async function OrdersPage() {
                 <CreateOrderDialog products={products} />
             </div>
 
-            <div className="rounded-md border bg-card">
-                <Table>
+            <div className="rounded-md border bg-card overflow-x-auto">
+                <Table className="min-w-[800px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>Order ID</TableHead>
@@ -42,14 +43,20 @@ export default async function OrdersPage() {
                                 <TableCell className="font-medium">#{order.id}</TableCell>
                                 <TableCell>
                                     <div className="font-bold">{order.customerName}</div>
-                                    <div className="text-xs text-muted-foreground">{order.customerContact}</div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <div className="text-xs text-muted-foreground">{order.customerContact}</div>
+                                        <ViewOrderDetails details={order.details} />
+                                    </div>
                                 </TableCell>
                                 <TableCell>
-                                    {order.items.map((item, i) => (
-                                        <div key={i} className="text-sm">
-                                            {item.quantity}x {item.productVariation.name}
-                                        </div>
-                                    ))}
+                                    <div className="space-y-1">
+                                        {order.items.map((item, i) => (
+                                            <div key={i} className="text-sm">
+                                                {item.quantity}x {item.productVariation.name}
+                                            </div>
+                                        ))}
+                                        {order.items.length === 0 && <span className="text-muted-foreground text-xs italic">No items (Manual)</span>}
+                                    </div>
                                 </TableCell>
                                 <TableCell>Tk {order.totalAmount}</TableCell>
                                 <TableCell className="text-green-500">Tk {order.advance}</TableCell>

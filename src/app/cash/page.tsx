@@ -21,7 +21,7 @@ export default async function CashPage() {
     // This implies Total Cash is all that matters for the split.
     // I'll keep the 8000 base for now so they don't see 0 initially.
 
-    const initialCapital = 8000
+    const initialCapital = 20000
 
     const bkashTotal = transactions
         .filter(t => t.account === "BKASH")
@@ -38,6 +38,10 @@ export default async function CashPage() {
 
     const grandTotal = initialCapital + bkashTotal + miscTotal
     const sharePerPerson = grandTotal / 4
+
+    // Profit/Loss Calculation (Base 5000)
+    const profitOrLoss = sharePerPerson - 5000
+    const isProfit = profitOrLoss >= 0
 
     return (
         <div className="space-y-8">
@@ -76,6 +80,13 @@ export default async function CashPage() {
                     <CardContent>
                         <div className="text-3xl font-bold text-white">Tk {sharePerPerson.toLocaleString()}</div>
                         <p className="text-xs text-muted-foreground mt-1">Per person share</p>
+
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                            <div className="text-sm font-medium text-muted-foreground mb-1">Profit / Loss (Base 5000)</div>
+                            <div className={`text-2xl font-bold ${isProfit ? "text-green-500" : "text-red-500"}`}>
+                                {isProfit ? "+" : ""}{profitOrLoss.toLocaleString()} Tk
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -10,34 +10,63 @@ export type OrderItemInput = {
 }
 
 export type OrderInput = {
-    customerName: string
+    details?: string
+    totalAmount: number
+    advance?: number
+    // Legacy fields kept optional for now or reused if needed
+    customerName?: string
     customerContact?: string
     customerAddress?: string
-    advance?: number
-    items: OrderItemInput[]
+    items?: OrderItemInput[]
 }
 
 export async function createOrder(data: OrderInput) {
     try {
-        const totalAmount = data.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+        // Calculate total amount from items to ensure accuracy
+        const totalAmount = data.items
+            ? data.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+            : data.totalAmount
 
-        const order = await prisma.order.create({
-            data: {
-                customerName: data.customerName,
-                customerContact: data.customerContact,
-                customerAddress: data.customerAddress,
-                status: "PENDING",
-                totalAmount,
-                advance: data.advance || 0,
-                items: {
-                    create: data.items.map(item => ({
-                        productVariationId: item.productVariationId,
-                        quantity: item.quantity,
-                        price: item.price
-                    }))
+        // Transaction to ensure order creation and stock deduction happen together
+        const order = await prisma.$transaction(async (tx) => {
+            const newOrder = await tx.order.create({
+                data: {
+                    details: data.details || "",
+                    // Fallbacks if user fills them, otherwise generic/empty
+                    customerName: data.customerName || "Manual Order",
+                    customerContact: data.customerContact,
+                    customerAddress: data.customerAddress,
+                    status: "PENDING",
+                    totalAmount,
+                    advance: data.advance || 0,
+                    // Items created only if provided (legacy support or future persistence)
+                    items: data.items ? {
+                        create: data.items.map(item => ({
+                            productVariationId: item.productVariationId,
+                            quantity: item.quantity,
+                            price: item.price
+                        }))
+                    } : undefined
+                }
+            })
+
+            // Immediately deduct stock if items exist
+            if (data.items) {
+                for (const item of data.items) {
+                    await tx.productVariation.update({
+                        where: { id: item.productVariationId },
+                        data: {
+                            quantity: {
+                                decrement: item.quantity
+                            }
+                        }
+                    })
                 }
             }
+
+            return newOrder
         })
+
         revalidatePath("/orders")
         return { success: true, order }
     } catch (error) {
@@ -58,17 +87,7 @@ export async function processOrder(orderId: number) {
             if (!order) throw new Error("Order not found")
             if (order.status !== "PENDING") throw new Error("Order is already processed or dispatched")
 
-            // Deduct stock
-            for (const item of order.items) {
-                await tx.productVariation.update({
-                    where: { id: item.productVariationId },
-                    data: {
-                        quantity: {
-                            decrement: item.quantity
-                        }
-                    }
-                })
-            }
+            // Stock deduction removed (moved to createOrder)
 
             // Update status
             await tx.order.update({
@@ -106,11 +125,27 @@ export async function dispatchOrder(orderId: number) {
 
 export async function returnOrder(orderId: number) {
     try {
-        // We only mark status as RETURNED. Stock is NOT automatically restored.
-        // User must manually restock if the item is salvageable.
-        await prisma.order.update({
-            where: { id: orderId },
-            data: { status: "RETURNED" }
+        // Restore Stock on Return
+        await prisma.$transaction(async (tx) => {
+            const order = await tx.order.findUnique({
+                where: { id: orderId },
+                include: { items: true }
+            })
+
+            if (!order) throw new Error("Order not found")
+
+            // Restore stock
+            for (const item of order.items) {
+                await tx.productVariation.update({
+                    where: { id: item.productVariationId },
+                    data: { quantity: { increment: item.quantity } }
+                })
+            }
+
+            await tx.order.update({
+                where: { id: orderId },
+                data: { status: "RETURNED" }
+            })
         })
         revalidatePath("/orders")
         return { success: true }
@@ -122,8 +157,28 @@ export async function returnOrder(orderId: number) {
 
 export async function deleteOrder(orderId: number) {
     try {
-        await prisma.order.delete({
-            where: { id: orderId }
+        // Restore Stock on Delete (if it was deducted)
+        await prisma.$transaction(async (tx) => {
+            const order = await tx.order.findUnique({
+                where: { id: orderId },
+                include: { items: true }
+            })
+
+            if (!order) return // Already deleted?
+
+            // Only restore if not already returned (since returning already restores)
+            if (order.status !== "RETURNED") {
+                for (const item of order.items) {
+                    await tx.productVariation.update({
+                        where: { id: item.productVariationId },
+                        data: { quantity: { increment: item.quantity } }
+                    })
+                }
+            }
+
+            await tx.order.delete({
+                where: { id: orderId }
+            })
         })
         revalidatePath("/orders")
         return { success: true }

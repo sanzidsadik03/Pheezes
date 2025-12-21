@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, ShoppingCart, Trash, Wand2 } from "lucide-react"
+import { ShoppingCart, Plus, Trash } from "lucide-react"
 import { createOrder, OrderInput } from "@/app/actions/order"
 import { useRouter } from "next/navigation"
 
@@ -30,32 +30,11 @@ export function CreateOrderDialog({ products }: { products: Product[] }) {
     const [loading, setLoading] = useState(false)
     const router = useRouter()
 
-    const [rawText, setRawText] = useState("")
-    const [customerName, setCustomerName] = useState("")
-    const [contact, setContact] = useState("")
-    const [address, setAddress] = useState("")
+    const [details, setDetails] = useState("")
     const [advance, setAdvance] = useState("0")
 
-    // Calculated fields
+    // Restore items state
     const [items, setItems] = useState<{ variationId: string, quantity: number, price: number }[]>([])
-
-    const parseText = () => {
-        if (!rawText) return
-
-        // Regex patterns
-        const nameMatch = rawText.match(/Name:\s*(.+?)(?=\n|$|,)/i)
-        const phoneMatch = rawText.match(/Phone:\s*(.+?)(?=\n|$|,)/i)
-        const addressMatch = rawText.match(/Address:\s*(.+?)(?=\n|$|Adv:|Cod:)/i)
-        const advMatch = rawText.match(/Adv:\s*(\d+)/i)
-        // We calculate COD automatically usually, but we can look for it if needed. 
-        // Logic: Total - Advance = COD.
-
-        if (nameMatch) setCustomerName(nameMatch[1].trim())
-        if (phoneMatch) setContact(phoneMatch[1].trim())
-        if (addressMatch) setAddress(addressMatch[1].trim())
-        if (advMatch) setAdvance(advMatch[1])
-        else setAdvance("0")
-    }
 
     const addItem = () => {
         setItems([...items, { variationId: "", quantity: 1, price: 0 }])
@@ -80,18 +59,18 @@ export function CreateOrderDialog({ products }: { products: Product[] }) {
         setItems(newItems)
     }
 
+    // Calculate total from items
     const totalAmount = items.reduce((acc, item) => acc + (item.price * item.quantity), 0)
-    const dueAmount = totalAmount - Number(advance)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
 
         const payload: OrderInput = {
-            customerName,
-            customerContact: contact,
-            customerAddress: address,
+            details,
+            totalAmount: Number(totalAmount),
             advance: Number(advance),
+            customerName: "Manual Order",
             items: items.map(i => ({
                 productVariationId: Number(i.variationId),
                 quantity: Number(i.quantity),
@@ -104,12 +83,9 @@ export function CreateOrderDialog({ products }: { products: Product[] }) {
 
         if (res.success) {
             setOpen(false)
-            setCustomerName("")
-            setContact("")
-            setAddress("")
-            setRawText("")
-            setAdvance("0")
+            setDetails("")
             setItems([])
+            setAdvance("0")
             router.refresh()
         } else {
             alert("Failed to create order")
@@ -126,131 +102,122 @@ export function CreateOrderDialog({ products }: { products: Product[] }) {
                     Create Order
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>New Order</DialogTitle>
                         <DialogDescription>
-                            Create a new order manually or paste customer details.
+                            Enter customer details and select products.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-                        {/* Magic Paste Section */}
-                        <div className="space-y-4 border-r pr-6">
-                            <div className="space-y-2">
-                                <Label className="flex items-center gap-2">
-                                    <Wand2 className="h-4 w-4 text-purple-500" />
-                                    Magic Paste
-                                </Label>
-                                <Textarea
-                                    className="min-h-[150px] bg-muted/50 font-mono text-xs"
-                                    placeholder={`Name: John Doe\nPhone: 01700000000\nAddress: 123 Street\nAdv: 500\nCod: 1500`}
-                                    value={rawText}
-                                    onChange={(e) => setRawText(e.target.value)}
-                                />
-                                <Button type="button" variant="secondary" size="sm" onClick={parseText} className="w-full">
-                                    Extract Details
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label>Order Details & Customer Info</Label>
+                            <Textarea
+                                className="min-h-[100px] font-mono text-sm"
+                                placeholder="Customer Name, Address, Contact, Notes..."
+                                value={details}
+                                onChange={(e) => setDetails(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        {/* Product Selection Section */}
+                        <div className="space-y-3 pt-2 border-t text-sm">
+                            <div className="flex items-center justify-between">
+                                <Label className="font-semibold">Products</Label>
+                                <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                                    <Plus className="h-4 w-4 mr-1" /> Add Item
                                 </Button>
                             </div>
 
-                            <div className="bg-muted/30 p-4 rounded-lg space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span>Subtotal:</span>
-                                    <span>Tk {totalAmount}</span>
-                                </div>
-                                <div className="flex justify-between text-sm text-green-500 font-medium">
-                                    <span>Advance Paid:</span>
-                                    <span>- Tk {advance}</span>
-                                </div>
-                                <div className="flex justify-between font-bold text-lg border-t pt-2 mt-2">
-                                    <span>Due (COD):</span>
-                                    <span>Tk {dueAmount}</span>
-                                </div>
+                            <div className="space-y-2">
+                                {items.map((item, i) => (
+                                    <div key={i} className="flex gap-2 items-center border p-2 rounded bg-muted/10">
+                                        <div className="flex-1">
+                                            <Select value={item.variationId} onValueChange={(val) => updateItem(i, "variationId", val)}>
+                                                <SelectTrigger className="h-8 text-xs">
+                                                    <SelectValue placeholder="Select Product" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectGroup>
+                                                        {allVariations.map((v) => (
+                                                            <SelectItem key={v.id} value={v.id.toString()}>
+                                                                {v.productName} - {v.name} (Tk {v.price})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectGroup>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="w-20">
+                                            <Input
+                                                type="number"
+                                                min="1"
+                                                value={item.quantity}
+                                                onChange={(e) => updateItem(i, "quantity", e.target.value)}
+                                                className="h-8 text-xs"
+                                                placeholder="Qty"
+                                            />
+                                        </div>
+                                        <div className="w-24">
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                value={item.price}
+                                                onChange={(e) => updateItem(i, "price", e.target.value)}
+                                                className="h-8 text-xs"
+                                                placeholder="Price"
+                                            />
+                                        </div>
+                                        <div className="w-20 text-right font-medium">
+                                            Tk {item.price * item.quantity}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive"
+                                            onClick={() => removeItem(i)}
+                                        >
+                                            <Trash className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                {items.length === 0 && <p className="text-center text-muted-foreground p-4">No items selected</p>}
                             </div>
                         </div>
 
-                        {/* Form Fields */}
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 border-t pt-4">
                             <div className="grid gap-2">
-                                <Label>Customer Name</Label>
-                                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <Label>Contact</Label>
-                                    <Input value={contact} onChange={(e) => setContact(e.target.value)} />
-                                </div>
-                                <div>
-                                    <Label>Advance (Tk)</Label>
-                                    <Input type="number" value={advance} onChange={(e) => setAdvance(e.target.value)} />
+                                <Label>Total Amount</Label>
+                                <div className="h-10 flex items-center px-3 border rounded-md bg-muted text-sm font-bold">
+                                    Tk {totalAmount}
                                 </div>
                             </div>
-                            <div>
-                                <Label>Address</Label>
-                                <Textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={2} />
+                            <div className="grid gap-2">
+                                <Label>Advance Paid</Label>
+                                <Input
+                                    type="number"
+                                    value={advance}
+                                    onChange={(e) => setAdvance(e.target.value)}
+                                    placeholder="0"
+                                />
                             </div>
+                        </div>
 
-                            <div className="space-y-3 pt-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="font-semibold">Items</Label>
-                                    <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                                        <Plus className="h-4 w-4 mr-1" /> Add
-                                    </Button>
-                                </div>
-                                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-                                    {items.map((item, i) => (
-                                        <div key={i} className="grid grid-cols-12 gap-2 items-end border p-2 rounded bg-muted/10">
-                                            <div className="col-span-12 sm:col-span-6">
-                                                <Select value={item.variationId} onValueChange={(val) => updateItem(i, "variationId", val)}>
-                                                    <SelectTrigger className="h-8 text-xs">
-                                                        <SelectValue placeholder="Product" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {allVariations.map((v) => (
-                                                                <SelectItem key={v.id} value={v.id.toString()}>
-                                                                    {v.productName} - {v.name}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="col-span-3 sm:col-span-3">
-                                                <Input
-                                                    type="number"
-                                                    min="1"
-                                                    value={item.quantity}
-                                                    onChange={(e) => updateItem(i, "quantity", e.target.value)}
-                                                    className="h-8 text-xs"
-                                                    placeholder="Qty"
-                                                />
-                                            </div>
-                                            <div className="col-span-2 sm:col-span-2 text-xs font-bold text-right py-2">
-                                                {item.price * item.quantity}
-                                            </div>
-                                            <div className="col-span-1 sm:col-span-1">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 text-destructive"
-                                                    onClick={() => removeItem(i)}
-                                                >
-                                                    <Trash className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                        <div className="rounded-lg bg-muted/50 p-3 text-sm flex justify-between font-medium">
+                            <span>Due (COD):</span>
+                            <span className={Number(totalAmount) - Number(advance) > 0 ? "text-red-500" : "text-green-500"}>
+                                Tk {Number(totalAmount) - Number(advance)}
+                            </span>
                         </div>
                     </div>
 
                     <DialogFooter>
-                        <Button type="submit" disabled={loading || items.length === 0} className="w-full sm:w-auto">
-                            {loading ? "Creating..." : `Create Order (Due: ${dueAmount})`}
+                        <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+                            {loading ? "Creating..." : "Create Order"}
                         </Button>
                     </DialogFooter>
                 </form>

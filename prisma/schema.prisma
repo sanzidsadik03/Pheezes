@@ -28,9 +28,10 @@ model ProductVariation {
 
 model Order {
   id              Int         @id @default(autoincrement())
-  customerName    String
+  customerName    String?
   customerContact String?
   customerAddress String?
+  details         String?     // Manual customer info and order details
   status          String      // PENDING, PROCESSING, DISPATCHED, RETURNED
   totalAmount     Float
   advance         Float       @default(0)
